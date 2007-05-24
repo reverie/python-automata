@@ -9,6 +9,7 @@ def delta(state, char):
   return state * 2 % 5 
  return (state*2+1)%5
 d = DFA.DFA(states=states, start=start, accepts=accepts, alphabet=alphabet, delta=delta)
+#Given a binary input, d accepts if the number represented is divisible by 5 (plus the empty string)
 print d.current_state
 d.input_sequence("1110101011101") #7517
 print d.current_state

@@ -7,6 +7,14 @@ class DFA:
         self.alphabet = alphabet
         self.current_state = start
     def validate(self):
+        """Checks that: 
+        (1) The accepting-state set is a subset of the state set.
+        (2) The start-state is a member of the state set.
+        (3) The current-state is a member of the state set.
+        (4) Every transition returns a member of the state set.
+
+        Obviously, this function will not work on infinite DFAs
+        """
         assert set(self.accepts).issubset(set(self.states))
         assert self.start in self.states
         assert self.current_state in self.states
@@ -14,16 +22,21 @@ class DFA:
             for char in self.alphabet:
                 assert self.delta(state, char) in self.states
     def input(self, char):
+        """Updates the DFA's current-state based on a single input"""
         self.current_state = self.delta(self.current_state, char)
     def input_sequence(self, char_sequence):
+        """Updates the DFA's current-state based on an iterable of inputs"""
         for char in char_sequence:
             self.current_state = self.delta(self.current_state, char)
     def status(self):
+        """Indicates whether the DFA's current state is accepting"""
         return (self.current_state in self.accepts)
     def reset(self):
         self.current_state = self.start
     def state_merge(self, q1, q2):
-        #merges q1 into q2
+        """Merges q1 into q2. All transitions to q1 are moved to q2
+        If q1 was the start or current state, those are moved to q2
+        """
         self.states.remove(q1)
         if q1 in self.accepts:
             self.accepts.remove(q1)
@@ -41,7 +54,7 @@ class DFA:
                 transitions[state][char] = next
         self.delta = (lambda s, c: transitions[s][c])
     def minimize(self):
-        #simpler, slower algorithm
+        """Classical DFA minimization, using the simple O(n^2) algorithm"""
         #print "starts with %d states" % len(self.states)
         changed = True
         classes = [self.accepts, [x for x in set(self.states).difference(set(self.accepts))]]
@@ -110,6 +123,10 @@ class DFA:
         self.accepts = new_accepts
         self.current_state = new_current_state
     def find_fin_inf_parts(self):
+        """Returns the partition of the state-set into the finite-part and infinite-part.
+        A state is in the finite part iff there are finitely many strings that reach it from the start state.
+        See "The DFAs of Finitely Different Regular Languages" for context.
+        """
         reachable = {}
         for state in self.states:
             reachable[state] = set()
@@ -134,6 +151,7 @@ class DFA:
                 finite_part.append(state)
         return (finite_part, infinite_part)
     def is_finite(self):
+        """Indicates whether the DFA's language is a finite set. Could be improved to O(n)."""
         self.minimize()
         (fin_part, inf_part) = self.find_fin_inf_parts()
         if len(inf_part) != 1:
@@ -146,18 +164,26 @@ class DFA:
                 return False
         return True
     def states_finitely_different(self, q1, q2):
+        """Indicates whether q1 and q2 only have finitely many distinguishing strings."""
         d1 = DFA(states=self.states, start=q1, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         d2 = DFA(states=self.states, start=q2, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         sd_dfa = symmetric_difference(d1, d2)
         return sd_dfa.is_finite()
     def finite_difference_minimize(self):
-        print "Before f-minimization, there are %s states" % len(self.states)
+        """Alters the DFA into a smallest possible DFA recognizing a finitely different language.
+
+        See "The DFAs of Finitely Different Regular Languages" for context.
+        This implementation does not achieve the running time advertised in that paper,  because:
+          -This library's classical minimization algorithm is suboptimal, and
+          -This library's algorithm to check if a DFA's language is finite is suboptimal
+        """
+        #print "Before f-minimization, there are %s states" % len(self.states)
         #Step 1
         self.minimize()
         #Step 2
         (fin_part, inf_part) = self.find_fin_inf_parts()
-        print "Finite part:", fin_part
-        print "Infinite part:", inf_part
+        #print "Finite part:", fin_part
+        #print "Infinite part:", inf_part
         #Step 3
         state_classes = []
         for state in self.states:
@@ -170,7 +196,7 @@ class DFA:
                     break
             if not placed:
                 state_classes.append([state])
-        print "State classes:", state_classes
+        #print "State classes:", state_classes
         #Step 4
         for sc in state_classes:
            fins = filter(lambda s: s in fin_part, sc)
@@ -183,11 +209,19 @@ class DFA:
                rep = fins[0]
                for fp_state in fins[1:]:
                    self.state_merge(fp_state, rep)
-        print "After f-minimization, there are %s states" % len(self.states)
+        #print "After f-minimization, there are %s states" % len(self.states)
     def DFCA_minimize(self, k):
+        """Placeholder for DFCA minimization.
+        See "Minimal cover-automata for finite languages" for context.
+        """
         pass
 
 def cross_product(D1, D2, accept_method):
+    """A generalized cross-product constructor over two DFAs. 
+    The third argument is a binary boolean function f, and a state in the final
+    DFA accepts if f(a,b), where a and b indicate the acceptance-value of the 
+    original states.
+    """
     states = []
     for s1 in D1.states:
         for s2 in D2.states:
@@ -207,18 +241,22 @@ def cross_product(D1, D2, accept_method):
     return DFA(states=states, start=start, delta=delta, accepts=accepts, alphabet=alphabet)
 
 def intersection(D1, D2):
+    """Constructs an unminimized DFA recognizing the intersection of the languages of two given DFAs."""
     f = lambda x,y: x and y
     return cross_product(D1, D2, f)
 
 def union(D1, D2):
+    """Constructs an unminimized DFA recognizing the union of the languages of two given DFAs."""
     f = lambda x,y: x or y
     return cross_product(D1, D2, f)
 
 def symmetric_difference(D1, D2):
+    """Constructs an unminimized DFA recognizing the symmetric difference of the languages of two given DFAs."""
     f = lambda x,y: x^y
     return cross_product(D1, D2, f)
 
 def inverse(D):
+    """Constructs an unminimized DFA recognizing the inverse of the languages of a given DFA."""
     new_accepts = []
     for state in D.states:
         if state not in D.accepts:
