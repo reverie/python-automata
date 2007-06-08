@@ -1,4 +1,6 @@
 import DFA
+
+#Basics:
 states = range(5)
 start = 0
 accepts = [0]
@@ -20,6 +22,7 @@ d.input_sequence("10011011101") #1245
 print d.current_state
 print d.status()
 
+#Finite difference minimization
 states = range(5)
 start = 0
 accepts = [0, 2, 4]
@@ -29,5 +32,9 @@ def delta(state, char):
   return state+1
  else:
   return 4
-e = DFA.DFA(states, start, delta, accepts, alphabet)
-
+e = DFA.DFA(states=states, start=start, delta=delta, accepts=accepts, alphabet=alphabet)
+print "===The starting DFA==="
+e.pretty_print()
+print "===F-minimized==="
+e.finite_difference_minimize()
+e.pretty_print()

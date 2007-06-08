@@ -1,11 +1,33 @@
+# python-automata, the Python DFA library
+# By Andrew Badr
+# Version June 7, 2007
+# Contact andrewbadr@gmail.com
+# Your contributions are welcome.
+
+#Copyright terms:
+#You may redistribute it and/or modify python-automata under the terms of the GNU General Public License, version 2, as published by the Free Software Foundation.
+
 class DFA:
-    def __init__(self, states, start, delta, accepts, alphabet):
+    def __init__(self, states, alphabet, delta, start, accepts):
         self.states = states
         self.start = start
         self.delta = delta
         self.accepts = accepts
         self.alphabet = alphabet
         self.current_state = start
+    def pretty_print(self):
+        print "--------------------------"
+        print "States:", self.states
+        print "Alphabet:", self.alphabet
+        print "Starting state:", self.start
+        print "Accepting states:", self.accepts
+        print "Transition function:"
+        print "\t","\t".join(map(str,self.states))
+        for c in self.alphabet:
+            results = map(lambda x: self.delta(x, c), self.states)
+            print c, "\t", "\t".join(map(str, results))
+        print "Current state:", self.current_state
+        print "Currently accepting:", self.status()
     def validate(self):
         """Checks that: 
         (1) The accepting-state set is a subset of the state set.
@@ -53,9 +75,39 @@ class DFA:
                     next = q2
                 transitions[state][char] = next
         self.delta = (lambda s, c: transitions[s][c])
+    def reachable_from(self, q0):
+        reached = [q0]
+        to_process = [q0]
+        while len(to_process):
+            q = to_process.pop()
+            for c in self.alphabet:
+                next = self.delta(q, c)
+                if next not in reached:
+                    reached.append(next)
+                    to_process.append(next)
+        return reached
+    def reachable(self):
+        return self.reachable_from(self.start)
     def minimize(self):
         """Classical DFA minimization, using the simple O(n^2) algorithm"""
+        """Side effect: can mix up the order of states"""
         #print "starts with %d states" % len(self.states)
+        #print self.states
+
+        #Step 1: Delete unreachable states
+        reachable = self.reachable()
+        #print "but only these are reachable:", reachable
+        self.states = reachable
+        #print "New self.states:", self.states
+        #print "Old acceptance list:", self.accepts
+        new_accepts = []
+        for q in self.accepts:
+            if q in self.states:
+                new_accepts.append(q)
+        self.accepts = new_accepts
+        #print "New acceptance list:", self.accepts
+
+        
         changed = True
         classes = [self.accepts, [x for x in set(self.states).difference(set(self.accepts))]]
         while changed:
@@ -97,6 +149,7 @@ class DFA:
         state_map = {}
         #build new_states, new_start, new_current_state:
         for state_class in classes:
+            #print "Processing state class:", state_class
             representative = state_class[0]
             new_states.append(representative)
             for state in state_class:
@@ -114,6 +167,8 @@ class DFA:
         for state in new_states:
             transitions[state] = {}
             for alpha in self.alphabet:
+                #print "transitions[%s][%s] = state_map[self.delta(%s, %s)]" % (state, alpha, state, alpha)
+                #print "transitions[%s][%s] = state_map[%s]" % (state, alpha, self.delta(state, alpha))
                 transitions[state][alpha] = state_map[self.delta(state, alpha)]
         #print transitions
         new_delta = (lambda s, a: transitions[s][a])
@@ -151,7 +206,8 @@ class DFA:
                 finite_part.append(state)
         return (finite_part, infinite_part)
     def is_finite(self):
-        """Indicates whether the DFA's language is a finite set. Could be improved to O(n)."""
+        """Indicates whether the DFA's language is a finite set. Could be improved to O(n).
+        Minimizes the DFA as a side-effect."""
         self.minimize()
         (fin_part, inf_part) = self.find_fin_inf_parts()
         if len(inf_part) != 1:
@@ -210,10 +266,23 @@ class DFA:
                for fp_state in fins[1:]:
                    self.state_merge(fp_state, rep)
         #print "After f-minimization, there are %s states" % len(self.states)
-    def DFCA_minimize(self, k):
-        """Placeholder for DFCA minimization.
-        See "Minimal cover-automata for finite languages" for context.
+    def DFCA_minimize(self, l):
+        """DFCA minimization.
+        Input: (self) is a DFA accepting a finite language, and (l) is the length of the longest word in its language
+        Result: (self) is DFCA-minimized
+
+        See "Minimal cover-automata for finite languages" for context on DFCAs, and
+        "An O(n^2) Algorithm for Constructing Minimal Cover Automata for Finite Languages"
+        for the source of this algorithm. (Campeanu, Paun, Santean, and Yu)
+        
+        There exists a faster, O(n*logn)-time algorithm due to Korner, from CIAA 2002.
         """
+        assert(self.is_finite())
+        ###Step 0: Numbering the states
+        ###Step 1: Computing the gap function
+
+
+        ###Step 2: Merging states
         pass
 
 def cross_product(D1, D2, accept_method):
@@ -242,7 +311,7 @@ def cross_product(D1, D2, accept_method):
 
 def intersection(D1, D2):
     """Constructs an unminimized DFA recognizing the intersection of the languages of two given DFAs."""
-    f = lambda x,y: x and y
+    f = bool.__and__
     return cross_product(D1, D2, f)
 
 def union(D1, D2):
