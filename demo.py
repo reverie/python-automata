@@ -38,3 +38,14 @@ e.pretty_print()
 print "===F-minimized==="
 e.finite_difference_minimize()
 e.pretty_print()
+
+states = range(3)
+alphabet = ['0', '1']
+def delta(q, c):
+    if q == 0:
+        return int(c)
+    else:
+        return 2
+start = 0
+accepts = [1]
+f = DFA.DFA(states=states, alphabet=alphabet, delta=delta, start=start, accepts=accepts)
