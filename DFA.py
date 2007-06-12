@@ -1,11 +1,9 @@
 # python-automata, the Python DFA library
+# License: New BSD License
 # Author: Andrew Badr
-# Version: June 9, 2007
+# Version: June 11, 2007
 # Contact: andrewbadr@gmail.com
-# Your code contributions are welcome.
-
-#Copyright terms:
-#You may redistribute and/or modify python-automata under the terms of the GNU General Public License, version 2, as published by the Free Software Foundation.
+# Code contributions are welcome.
 
 class DFA:
     """This class represents a deterministic finite automon."""
@@ -19,7 +17,7 @@ class DFA:
 
         Making delta a function rather than a transition table makes it much easier to define certain DFAs. 
         And if you want to use transition tables, you can just do this:
-         delta = lambda x,y: table[x][y]
+         delta = lambda q,c: transition_table[q][c]
         """
         self.states = states
         self.start = start
@@ -31,7 +29,11 @@ class DFA:
 # Administrative functions:
 #
     def pretty_print(self):
-        print "--------------------------"
+        """Displays all information about the DFA in an easy-to-read way. Not
+        so easy to read if you have too many states.
+        """
+        print ""
+        print "This DFA has %s states" % len(self.states)
         print "States:", self.states
         print "Alphabet:", self.alphabet
         print "Starting state:", self.start
@@ -74,7 +76,7 @@ class DFA:
     def reset(self):
         """Returns the DFA to the starting state."""
         self.current_state = self.start
-    def accepts(self, char_sequence):
+    def recognizes(self, char_sequence):
         """Indicates whether the DFA accepts a given string."""
         state_save = self.current_state
         self.reset()
@@ -86,8 +88,8 @@ class DFA:
 # Minimization methods and their helper functions
 #
     def state_merge(self, q1, q2):
-        """Merges q1 into q2. All transitions to q1 are moved to q2
-        If q1 was the start or current state, those are moved to q2
+        """Merges q1 into q2. All transitions to q1 are moved to q2.
+        If q1 was the start or current state, those are also moved to q2.
         """
         self.states.remove(q1)
         if q1 in self.accepts:
@@ -262,11 +264,9 @@ class DFA:
         """Indicates whether the DFA's language is a finite set."""
         plucked = self.pluck_leaves()
         return (self.start in plucked)
-        #(f, i) = self.find_fin_inf_parts()
-        #return (self.start in f)
-
     def states_finitely_different(self, q1, q2):
         """Indicates whether q1 and q2 only have finitely many distinguishing strings."""
+        #Can be used for a simpler (but slower) finite-difference minimization algorithm
         d1 = DFA(states=self.states, start=q1, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         d2 = DFA(states=self.states, start=q2, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         sd_dfa = symmetric_difference(d1, d2)
@@ -329,27 +329,95 @@ class DFA:
             level_states = next_level_states
             level_number = next_level_number
         return levels
-    def DFCA_minimize(self, l):
-        """DFCA minimization.
-        Input: (self) is a DFA accepting a finite language, and (l) is the length of the longest word in its language
-        Result: (self) is DFCA-minimized
+    def longest_word_length(self):
+        """Given a DFA recognizing a finite language, returns the length of the
+        longest word in that language, or None if the language is empty.
+        """
+        assert(self.is_finite())
+        def long_path(q,length, longest):
+            if q in self.accepts:
+                if length > longest:
+                    longest = length
+            for char in self.alphabet:
+                next = self.delta(q, char)
+                if next != q:
+                     candidate = long_path(next, length+1, longest)
+                     if candidate > longest:
+                         longest = candidate
+            return longest
+        return long_path(self.start, 0, None)
+    def DFCA_minimize(self):
+        """DFCA minimization"
+        Input: "self" is a DFA accepting a finite language, and "l" is the length of the longest word in its language
+        Result: "self" is DFCA-minimized
 
         See "Minimal cover-automata for finite languages" for context on DFCAs, and
         "An O(n^2) Algorithm for Constructing Minimal Cover Automata for Finite Languages"
-        for the source of this algorithm. (Campeanu, Paun, Santean, and Yu)
+        for the source of this algorithm (Campeanu, Paun, Santean, and Yu). We follow their
+        algorithm exactly, except that "l" is automatically calculated and returned.
         
         There exists a faster, O(n*logn)-time algorithm due to Korner, from CIAA 2002.
         """
         assert(self.is_finite())
         self.minimize()
-        ###Step 0: Numbering the states
-        state_count = len(self.states)
-        n = state_count - 1
-        ###Step 1: Computing the gap function
-        levels = self.levels()
+        ###Step 0: Numbering the states and computing "l"
+        n = len(self.states) - 1
+        state_order = self.pluck_leaves()
+        state_order.reverse() 
+        l = self.longest_word_length()
+        #We're giving each state a numerical name so that the  algorithm can 
+        # run on an "ordered" DFA -- see the paper for why. These functions
+        # allow us to copiously convert between names.
+        def nn(q): # "numerical name"
+            return state_order.index(q)
+        def rn(n): # "real name"
+            return state_order[n]
 
+        ###Step 1: Computing the gap function
+        # 1.1
+        level = self.levels() #holds real names
+        gap = {}  #holds numerical names
+        # 1.2 
+        for i in range(n):
+            gap[(i, n)] = l
+        if level[rn(n)] <= l:
+            for q in self.accepts:
+                gap[(nn(q), n)] = 0
+        # 1.3
+        for i in range(n-1):
+            for j in range(i+1, n):
+                if (rn(i) in self.accepts)^(rn(j) in self.accepts):
+                    gap[(i,j)] = 0
+                else:
+                    gap[(i,j)] = l
+        # 1.4
+        def level_range(i, j):
+            return l - max(level[rn(i)], level[rn(j)])
+        for i in range(n-2, -1, -1):
+            for j in range(n, i, -1):
+                for char in self.alphabet:
+                    i2 = nn(self.delta(rn(i), char))
+                    j2 = nn(self.delta(rn(j), char))
+                    if i2 != j2:
+                        if i2 < j2:
+                            g = gap[(i2, j2)]
+                        else:
+                            g = gap[(j2, i2)]
+                        if g+1 <= level_range(i, j):
+                            gap[(i,j)] = min(gap[(i,j)], g+1)
         ###Step 2: Merging states
-        pass
+        # 2.1
+        P = {}
+        for i in range(n+1):
+            P[i] = False
+        # 2.2
+        for i in range(n):
+            if P[i] == False:
+                for j in range(i+1, n+1):
+                    if (P[j] == False) and (gap[(i,j)] == l):
+                        self.state_merge(rn(j), rn(i))
+                        P[j] = True
+        return l
 #
 # Boolean set operations on languages
 #
@@ -401,10 +469,24 @@ def inverse(D):
 # 
 # Constructing new DFAs
 # 
-def from_finite_word_list(language):
-    """Placeholder. Will construct the acyclic DFA accepting a given finite language."""
-    pass
-
+def from_word_list(language, alphabet):
+    """Constructs an unminimized DFA accepting the given finite language."""
+    accepts = language
+    start = ''
+    sink = 'sink'
+    def delta(q, c):
+        next = q+c
+        if next in states:
+            return next
+        else:
+            return sink
+    states = [start, sink]
+    for word in language:
+        for i in range(len(word)):
+            prefix = word[:i+1]
+            if prefix not in states:
+                states.append(prefix)
+    return DFA(states=states, alphabet=alphabet, delta=delta, start=start, accepts=accepts)
 def modular_zero(n, base=2):
     """Returns a DFA that accepts all binary numbers equal to 0 mod n. Use the optional
     parameter "base" if you want something other than binary. The empty string is always 
