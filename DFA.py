@@ -1,7 +1,7 @@
 # python-automata, the Python DFA library
 # License: New BSD License
 # Author: Andrew Badr
-# Version: June 17, 2007
+# Version: June 21, 2007
 # Contact: andrewbadr@gmail.com
 # Code contributions are welcome.
 
@@ -13,15 +13,18 @@ class DFA:
         """The inputs to the class are as follows:
          -states: a lists containing the states of the DFA
          -alphabet: a list containing the symbols in the DFA's alphabet
-         -delta: a complete function from [states]x[alphabets]->[states]. See note below.
+         -delta: a complete function from [states]x[alphabets]->[states].
          -start: the state at which the DFA begins operation.
-         -accepts: an iterable containing the "accepting" or "final" states of the DFA
+         -accepts: a list containing the "accepting" or "final" states of the DFA
 
         Making delta a function rather than a transition table makes it much easier to define certain DFAs. 
         And if you want to use transition tables, you can just do this:
          delta = lambda q,c: transition_table[q][c]
         One caveat is that the function should not depend on the value of 'states' or 'accepts', since
         these may be modified during minimization.
+
+        Finally, the names of states and inputs should be hashable. This generally means strings, numbers,
+        or tuples of hashables.
         """
         self.states = states
         self.start = start
@@ -305,8 +308,10 @@ class DFA:
         return plucked
     def is_finite(self):
         """Indicates whether the DFA's language is a finite set."""
-        plucked = self.pluck_leaves()
-        return (self.start in plucked)
+        #plucked = self.pluck_leaves()
+        #return (self.start in plucked)
+        (fp, ip) = self.find_fin_inf_parts()
+        return (self.start in fp)
     def states_finitely_different(self, q1, q2):
         """Indicates whether q1 and q2 only have finitely many distinguishing strings."""
         #Can be used for a simpler (but slower) finite-difference minimization algorithm
@@ -469,8 +474,38 @@ class DFA:
                         self.state_merge(rn(j), rn(i))
                         P[j] = True
         return l
+# 
+# Finite-factoring
+# 
+    def finite_factor(self):
+        print "Before factoring, uses %s states" % (len(self.states))
+        from copy import copy
+        print "Original DFA:"
+        self.pretty_print()
+        old_states = copy(self.states)
+        old_alpha  = copy(self.alphabet)
+        old_accept = copy(self.accepts)
+        old_delta  = self.delta
+        old_start  = self.start
+        old_dfa = DFA(old_states, old_alpha, old_delta, old_start, old_accept)
+        print "Copy:"
+        old_dfa.pretty_print()
+        self.finite_difference_minimize()
+        print "Original f-minimized:"
+        self.pretty_print()
+        diff = symmetric_difference(old_dfa, self)
+        print "Finite-difference recognizer:"
+        diff.pretty_print()
+        return diff
+        l = diff.DFCA_minimize()
+        print "After factoring, uses:"
+        print "\t for the infinite factor" % (len(self.states))
+        print "\t for the finite factor" % (len(diff.states))
+        return (diff, l)
+
+
 #
-# Boolean set operations on languages
+# Boolean set operations on languages -- end of the DFA class
 #
 def cross_product(D1, D2, accept_method):
     """A generalized cross-product constructor over two DFAs. 
