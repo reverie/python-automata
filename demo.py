@@ -14,12 +14,12 @@ def delta(state, char):
 d = DFA.DFA(states=states, start=start, accepts=accepts, alphabet=alphabet, delta=delta)
 print "Given a binary input, d accepts if the number represented is divisible by 5 (plus the empty string):"
 d.pretty_print()
-raw_input()
+#raw_input()
 print 'd.input_sequence("1110101011101") #7517'
 d.input_sequence("1110101011101") #7517
 print "Current state:", d.current_state
 print "Accepting:", d.status()
-raw_input()
+#raw_input()
 print "Resetting..."
 d.reset()
 print d.current_state
@@ -35,19 +35,19 @@ print "a = ['1', '11', '111', '1111', '11110', '11111', '111111', '111110']"
 print "b = ['0', '1']"
 print "e = DFA.from_word_list(a,b)"
 print "..."
-raw_input()
+#raw_input()
 print "===The starting DFA==="
 e.pretty_print()
-raw_input()
+#raw_input()
 print "==Minimized==="
 e.minimize()
 e.pretty_print()
-raw_input()
+#raw_input()
 print "==...then DFCA-Minimized==="
 e.DFCA_minimize()
 e.pretty_print()
-raw_input()
+#raw_input()
 print "==...then Finite-Difference Minimized==="
 e.finite_difference_minimize()
 e.pretty_print()
-raw_input()
+#raw_input()
