@@ -6,6 +6,7 @@
 # Code contributions are welcome.
 
 from debug import prints
+from copy import copy
 
 class DFA:
     """This class represents a deterministic finite automon."""
@@ -70,7 +71,6 @@ class DFA:
                 assert self.delta(state, char) in self.states
     def copy(self):
         """Returns a copy of the DFA. No data is shared with the original."""
-        from copy import copy
         return DFA(copy(self.states), copy(self.alphabet), self.delta, self.start, copy(self.accepts))
 
 #
@@ -173,7 +173,7 @@ class DFA:
             if q in self.states:
                 new_accepts.append(q)
         self.accepts = new_accepts
-    def mh_classes(self):
+    def mn_classes(self):
         """Returns a partition of self.states into Myhill-Nerode equivalence classes."""
         changed = True
         classes = []
@@ -258,7 +258,7 @@ class DFA:
         self.delete_unreachable()
         prints("After deleting unreachable: %s" % self.states)
         #Step 2: Partition the states into equivalence classes        
-        classes = self.mh_classes()
+        classes = self.mn_classes()
         #Step 3: Construct the new DFA
         self.collapse(classes)
     def find_fin_inf_parts(self):
@@ -281,11 +281,8 @@ class DFA:
         infinite_part = filter(lambda x: not in_fin[x], self.states)
         return (finite_part, infinite_part)
     def pluck_leaves(self):
-        """Only for minimized automata. Returns a maximal list S of states s_0...s_n such that for every 
-        0<=i<=n: 
-            -s_i induces a finite language
-            -s_i's outgoing transitions are all to s_0...s_i
-        This is also a maximal list of vertices satisfying the first property alone.
+        """Only for minimized automata. Returns a topologically ordered list of
+        all the states that induce a finite language. Runs in linear time.
         """
         #Step 1: Build the states' profiles
         loops    = self.state_hash(0)
@@ -318,6 +315,7 @@ class DFA:
                 if (len(outbound[incoming]) == 0) and (incoming != state):
                     to_pluck.append(incoming)
                     #prints("Adding '%s' to be plucked" % incoming)
+        plucked.reverse()
         return plucked
     def is_finite(self):
         """Indicates whether the DFA's language is a finite set."""
@@ -334,20 +332,21 @@ class DFA:
     def finite_difference_minimize(self):
         """Alters the DFA into a smallest possible DFA recognizing a finitely different language.
         In other words, if D is the original DFA and D' the result of this function, then the 
-        symmetric difference of L(D) and L(D') will be a finite set, and there will be no possible
-        D' with fewer states than this one.
+        symmetric difference of L(D) and L(D') will be a finite set, and there exists no smaller
+        automaton than D' with this property.
 
         See "The DFAs of Finitely Different Regular Languages" for context.
         """
-        #Step 1: Classical minimization
+        #Step 1: Classical minimization - O(n*logn)
         self.minimize()
-        #Step 2: Partition states into equivalence classes
+        #Step 2: Partition states into equivalence classes - O(n^2*logn)
         sd = symmetric_difference(self, self)
         sd2 = sd.copy()
-        classes = sd.mh_classes()
+        classes = sd.mn_classes()
         state_map = sd2.collapse(classes)
         plucked = sd2.pluck_leaves()
-        similar_states_list = filter(lambda q: state_map[q] in plucked, sd.states)
+        plucked_h = sd2.state_subset_hash(plucked)
+        similar_states_list = filter(lambda q: plucked_h[state_map[q]], sd.states)
         similar_states = sd.state_subset_hash(similar_states_list)
         state_classes = []
         for state in self.states:
@@ -373,11 +372,11 @@ class DFA:
             else:
                 rep = fins[0]
                 for fp_state in fins[1:]:
-                    if rep not in self.reachable_from(fp_state):
+                    #if rep not in self.reachable_from(fp_state):
                         self.state_merge(fp_state, rep)
-                    else:
-                        self.state_merge(rep, fp_state)
-                        rep = fp_state
+                    #else:
+                    #    self.state_merge(rep, fp_state)
+                    #    rep = fp_state
     def levels(self):
         """Returns a dictionary mapping each state to its distance from the starting state."""
         levels = {}
@@ -434,7 +433,6 @@ class DFA:
         ###Step 0: Numbering the states and computing "l"
         n = len(self.states) - 1
         state_order = self.pluck_leaves()
-        state_order.reverse() 
         if l==None:
             l = self.longest_word_length()
         #We're giving each state a numerical name so that the  algorithm can 
@@ -500,7 +498,6 @@ def cross_product(D1, D2, accept_method):
     The third argument is a binary boolean function f; a state (q1, q2) in the final
     DFA accepts if f(A[q1],A[q2]), where A indicates the acceptance-value of the state.
     """
-    from copy import copy
     assert(D1.alphabet == D2.alphabet)
     states = []
     for s1 in D1.states:
@@ -548,7 +545,6 @@ def inverse(D):
 # 
 def from_word_list(language, alphabet):
     """Constructs an unminimized DFA accepting the given finite language."""
-    from copy import copy
     accepts = language
     start = ''
     sink = 'sink'
@@ -599,19 +595,10 @@ def random(states_size, alphabet_size, acceptance=0.5):
 # Finite-factoring
 # 
 def finite_factor(self):
-    from copy import copy
-    print "Before factoring, uses %s states" % (len(self.states))
-    print "Original DFA:"
-    self.pretty_print()
-    D2 = self.copy()
+    D1 = self.copy()
+    D1.minimize()
+    D2 = D1.copy()
     D2.finite_difference_minimize()
-    print "F-minimized:"
-    D2.pretty_print()
-    D3 = symmetric_difference(old_dfa, self)
-    print "Finite-difference recognizer:"
-    D3.pretty_print()
+    D3 = symmetric_difference(D1, D2)
     l = D3.DFCA_minimize()
-    print "After factoring, uses:"
-    print "\t for the infinite factor" % (len(D2.states))
-    print "\t for the finite factor" % (len(D3.states))
     return (D2, (D3, l))
