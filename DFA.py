@@ -259,8 +259,10 @@ class DFA:
         prints("After deleting unreachable: %s" % self.states)
         #Step 2: Partition the states into equivalence classes        
         classes = self.mn_classes()
+        prints("Classes: %s" % classes)
         #Step 3: Construct the new DFA
         self.collapse(classes)
+        prints("After collapsing: %s" % self.states)
     def find_fin_inf_parts(self):
         """Returns the partition of the state-set into the finite-part and 
         infinite-part as a 2-tuple. A state is in the finite part iff there 
@@ -329,17 +331,8 @@ class DFA:
         d2 = DFA(states=self.states, start=q2, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         sd_dfa = symmetric_difference(d1, d2)
         return sd_dfa.is_finite()
-    def finite_difference_minimize(self):
-        """Alters the DFA into a smallest possible DFA recognizing a finitely different language.
-        In other words, if D is the original DFA and D' the result of this function, then the 
-        symmetric difference of L(D) and L(D') will be a finite set, and there exists no smaller
-        automaton than D' with this property.
-
-        See "The DFAs of Finitely Different Regular Languages" for context.
-        """
-        #Step 1: Classical minimization - O(n*logn)
-        self.minimize()
-        #Step 2: Partition states into equivalence classes - O(n^2*logn)
+    def fd_classes(self):
+        """Returns a partition of the states into finite-difference equivalence classes."""
         sd = symmetric_difference(self, self)
         sd2 = sd.copy()
         classes = sd.mn_classes()
@@ -359,6 +352,19 @@ class DFA:
                     break #only for speed, not logic -- like how I live
             if not placed:
                 state_classes.append([state])
+        return state_classes
+    def finite_difference_minimize(self):
+        """Alters the DFA into a smallest possible DFA recognizing a finitely different language.
+        In other words, if D is the original DFA and D' the result of this function, then the 
+        symmetric difference of L(D) and L(D') will be a finite set, and there exists no smaller
+        automaton than D' with this property.
+
+        See "The DFAs of Finitely Different Regular Languages" for context.
+        """
+        #Step 1: Classical minimization
+        self.minimize()
+        #Step 2: Partition states into equivalence classes
+        state_classes = self.fd_classes()
         #Step 3: Find finite and infinite parts
         (fin_part, inf_part) = self.find_fin_inf_parts()
         #Step 4: Merge
@@ -372,11 +378,7 @@ class DFA:
             else:
                 rep = fins[0]
                 for fp_state in fins[1:]:
-                    #if rep not in self.reachable_from(fp_state):
                         self.state_merge(fp_state, rep)
-                    #else:
-                    #    self.state_merge(rep, fp_state)
-                    #    rep = fp_state
     def levels(self):
         """Returns a dictionary mapping each state to its distance from the starting state."""
         levels = {}
@@ -400,6 +402,7 @@ class DFA:
     def longest_word_length(self):
         """Given a DFA recognizing a finite language, returns the length of the
         longest word in that language, or None if the language is empty.
+        Assumes the input is minimized.
         """
         assert(self.is_finite())
         def long_path(q,length, longest):
