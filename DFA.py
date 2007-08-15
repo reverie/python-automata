@@ -9,7 +9,7 @@ from debug import prints
 from copy import copy
 
 class DFA:
-    """This class represents a deterministic finite automon."""
+    """This class represents a deterministic finite automaton."""
     def __init__(self, states, alphabet, delta, start, accepts):
         """The inputs to the class are as follows:
          -states: a lists containing the states of the DFA
