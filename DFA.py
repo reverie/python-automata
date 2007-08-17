@@ -104,7 +104,15 @@ class DFA:
         """Creates a hash with one key for every state in the DFA, and
         all values initialized to the 'value' passed.
         """
-        return dict.fromkeys(self.states, value)
+        d = {}
+        for state in self.states:
+            if value == {}:
+                d[state] = {}
+            elif value == []:
+                d[state] = []
+            else:
+                d[state] = value
+        return d
     def state_subset_hash(self, subset):
         """Creates a hash with one key for every state in the DFA, with
         the value True for states in 'subset' and False for all others.
