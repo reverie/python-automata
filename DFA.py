@@ -5,8 +5,8 @@
 # Contact: andrewbadr@gmail.com
 # Code contributions are welcome.
 
-from debug import prints
 from copy import copy
+from UnionFind import UnionFind
 
 class DFA:
     """This class represents a deterministic finite automaton."""
@@ -106,13 +106,9 @@ class DFA:
         """
         d = {}
         for state in self.states:
-            if value == {}:
-                d[state] = {}
-            elif value == []:
-                d[state] = []
-            else:
-                d[state] = value
+                d[state] = copy(value)
         return d
+
     def state_subset_hash(self, subset):
         """Creates a hash with one key for every state in the DFA, with
         the value True for states in 'subset' and False for all others.
@@ -121,11 +117,11 @@ class DFA:
         for q in subset:
             hash[q] = True
         return hash
+
     def state_merge(self, q1, q2):
         """Merges q1 into q2. All transitions to q1 are moved to q2.
         If q1 was the start or current state, those are also moved to q2.
         """
-        prints("Merging '%s' into '%s'" % (q1, q2))
         self.states.remove(q1)
         if q1 in self.accepts:
             self.accepts.remove(q1)
@@ -138,13 +134,11 @@ class DFA:
             transitions[state] = {}
             for char in self.alphabet:
                 next = self.delta(state, char)
-                prints("Checking transition [%s][%s]->[%s]" % (state, char, next))
                 if next == q1:
-                    prints("Changing transition [%s][%s]->[%s]" % (state, char, next))
                     next = q2
-                    prints("           Now it's [%s][%s]->[%s]" % (state, char, next))
                 transitions[state][char] = next
         self.delta = (lambda s, c: transitions[s][c])
+
     def reachable_from(self, q0, inclusive=True):
         """Returns the set of states reachable from given state q0. The optional
         parameter "inclusive" indicates that q0 should always be included.
@@ -161,9 +155,11 @@ class DFA:
                     reached[next] = True
                     to_process.append(next)
         return filter(lambda q: reached[q], self.states)
+
     def reachable(self):
         """Returns the reachable subset of the DFA's states."""
         return self.reachable_from(self.start)
+
     def delete_unreachable(self):
         """Deletes all the unreachable states."""
         reachable = self.reachable()
@@ -223,7 +219,6 @@ class DFA:
         state_map = {}
         #build new_states, new_start, new_current_state:
         for state_class in partition:
-            prints("Processing state class: %s" % state_class)
             representative = state_class[0]
             new_states.append(representative)
             for state in state_class:
@@ -253,19 +248,16 @@ class DFA:
         """Classical DFA minimization, using the simple O(n^2) algorithm.
         Side effect: can mix up the internal ordering of states.
         """
-        prints("Starting states: %s" % self.states)
         #Step 1: Delete unreachable states
         self.delete_unreachable()
-        prints("After deleting unreachable: %s" % self.states)
         #Step 2: Partition the states into equivalence classes        
         classes = self.mn_classes()
-        prints("Classes: %s" % classes)
         #Step 3: Construct the new DFA
         self.collapse(classes)
-        prints("After collapsing: %s" % self.states)
-    def find_fin_inf_parts(self):
-        """Returns the partition of the state-set into the finite-part and 
-        infinite-part as a 2-tuple. A state is in the finite part iff there 
+
+    def preamble_and_kernel(self):
+        """Returns the partition of the state-set into the preamble and 
+        kernel as a 2-tuple. A state is in the preamble iff there 
         are finitely many strings that reach it from the start state.
 
         See "The DFAs of Finitely Different Regular Languages" for context.
@@ -279,9 +271,10 @@ class DFA:
             if q in reachable[q]:
                 for next in reachable[q]:
                     in_fin[next] = False
-        finite_part = filter(lambda x: in_fin[x], self.states)
-        infinite_part = filter(lambda x: not in_fin[x], self.states)
-        return (finite_part, infinite_part)
+        preamble = filter(lambda x: in_fin[x], self.states)
+        kernel = filter(lambda x: not in_fin[x], self.states)
+        return (preamble, kernel)
+
     def pluck_leaves(self):
         """Only for minimized automata. Returns a topologically ordered list of
         all the states that induce a finite language. Runs in linear time.
@@ -319,41 +312,68 @@ class DFA:
                     #prints("Adding '%s' to be plucked" % incoming)
         plucked.reverse()
         return plucked
+
+    def right_finite_states(self, sink_states):
+        """Given a DFA (self) and a list of states (sink_states) that are assumed to induce the
+        empty language, return the topologically-ordered set of states in the DFA that induce
+        finite languages.
+        """
+        #Step 1: Build the states' profiles
+        inbound  = self.state_hash([])
+        outbound = self.state_hash([])
+        is_sink_state = self.state_subset_hash(sink_states)
+        for state in self.states:
+            if is_sink_state[state]:
+                continue
+            for c in self.alphabet:
+                next = self.delta(state, c)
+                inbound[next].append(state)
+                outbound[state].append(next)
+
+        #Step 2: Pluck!
+        to_pluck = sink_states
+        plucked = []
+        while len(to_pluck):
+            state = to_pluck.pop()
+            plucked.append(state)
+            for incoming in inbound[state]:
+                outbound[incoming].remove(state)
+                if (len(outbound[incoming]) == 0) and (incoming != state):
+                    to_pluck.append(incoming)
+        plucked.reverse()
+        return plucked
+ 
     def is_finite(self):
         """Indicates whether the DFA's language is a finite set."""
         D2 = self.copy()
         D2.minimize()
         plucked = D2.pluck_leaves()
         return (D2.start in plucked)
+
     def states_fd_equivalent(self, q1, q2):
         """Indicates whether q1 and q2 only have finitely many distinguishing strings."""
         d1 = DFA(states=self.states, start=q1, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         d2 = DFA(states=self.states, start=q2, accepts=self.accepts, delta=self.delta, alphabet=self.alphabet)
         sd_dfa = symmetric_difference(d1, d2)
         return sd_dfa.is_finite()
-    def fd_classes(self):
-        """Returns a partition of the states into finite-difference equivalence classes."""
+
+    def f_equivalence_classes(self):
+        """Returns a partition of the states into finite-difference equivalence clases, using
+        the experimental O(n^2) algorithm."""
         sd = symmetric_difference(self, self)
-        sd2 = sd.copy()
-        classes = sd.mn_classes()
-        state_map = sd2.collapse(classes)
-        plucked = sd2.pluck_leaves()
-        plucked_h = sd2.state_subset_hash(plucked)
-        similar_states_list = filter(lambda q: plucked_h[state_map[q]], sd.states)
-        similar_states = sd.state_subset_hash(similar_states_list)
-        state_classes = []
+        self_pairs = [(x, x) for x in self.states]
+        fd_equiv_pairs = sd.right_finite_states(self_pairs)
+        sets = UnionFind()
         for state in self.states:
-            placed = False
-            for sc in state_classes:
-                rep = sc[0]
-                if similar_states[(state,rep)]:
-                    sc.append(state)
-                    placed = True
-                    break #only for speed, not logic -- like how I live
-            if not placed:
-                state_classes.append([state])
+            sets.make_set(state)
+        for (state1, state2) in fd_equiv_pairs:
+            set1, set2 = sets.find(state1), sets.find(state2)
+            if set1 != set2:
+                sets.union(set1, set2)
+        state_classes = sets.as_lists()
         return state_classes
-    def finite_difference_minimize(self):
+
+    def hyper_minimize(self):
         """Alters the DFA into a smallest possible DFA recognizing a finitely different language.
         In other words, if D is the original DFA and D' the result of this function, then the 
         symmetric difference of L(D) and L(D') will be a finite set, and there exists no smaller
@@ -361,24 +381,25 @@ class DFA:
 
         See "The DFAs of Finitely Different Regular Languages" for context.
         """
-        #Step 1: Classical minimization
+        # Step 1: Classical minimization
         self.minimize()
-        #Step 2: Partition states into equivalence classes
-        state_classes = self.fd_classes()
-        #Step 3: Find finite and infinite parts
-        (fin_part, inf_part) = self.find_fin_inf_parts()
-        #Step 4: Merge
+        # Step 2: Partition states into equivalence classes
+        state_classes = self.f_equivalence_classes()
+        # Step 3: Find preamble and kernel parts
+        (preamble, kernel) = self.preamble_and_kernel()
+        # Step 4: Merge (f_merge_states in the paper)
+        # (Could be done more efficiently)
         for sc in state_classes:
-            fins = filter(lambda s: s in fin_part, sc)
-            infs = filter(lambda s: s in inf_part, sc)
-            if len(infs) != 0:
-                rep = infs[0]
-                for fp_state in fins:
-                    self.state_merge(fp_state, rep)
+            pres = filter(lambda s: s in preamble, sc)
+            kers = filter(lambda s: s in kernel, sc)
+            if len(kers):
+                rep = kers[0]
+                for p_state in pres:
+                    self.state_merge(p_state, rep)
             else:
-                rep = fins[0]
-                for fp_state in fins[1:]:
-                        self.state_merge(fp_state, rep)
+                rep = pres[0]
+                for p_state in pres[1:]:
+                        self.state_merge(p_state, rep)
     def levels(self):
         """Returns a dictionary mapping each state to its distance from the starting state."""
         levels = {}
@@ -417,6 +438,7 @@ class DFA:
                          longest = candidate
             return longest
         return long_path(self.start, 0, None)
+
     def DFCA_minimize(self, l=None):
         """DFCA minimization"
         Input: "self" is a DFA accepting a finite language
@@ -601,7 +623,7 @@ def finite_factor(self):
     D1 = self.copy()
     D1.minimize()
     D2 = D1.copy()
-    D2.finite_difference_minimize()
+    D2.hyper_minimize()
     D3 = symmetric_difference(D1, D2)
     l = D3.DFCA_minimize()
     return (D2, (D3, l))

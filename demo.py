@@ -1,4 +1,5 @@
 import DFA
+#5 / 10 8 7 3
 
 #Basics:
 states = range(5)
@@ -48,6 +49,6 @@ e.DFCA_minimize()
 e.pretty_print()
 #raw_input()
 print "==...then Finite-Difference Minimized==="
-e.finite_difference_minimize()
+e.hyper_minimize()
 e.pretty_print()
 #raw_input()
