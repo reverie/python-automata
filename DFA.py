@@ -8,6 +8,9 @@
 from copy import copy
 from UnionFind import UnionFind
 
+# TODO: general code cleanup
+# TODO: use sets throughout, especially replacing state_hash functions
+
 class DFA:
     """This class represents a deterministic finite automaton."""
     def __init__(self, states, alphabet, delta, start, accepts):
