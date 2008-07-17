@@ -1,7 +1,7 @@
 # python-automata, the Python DFA library
 # License: New BSD License
 # Author: Andrew Badr
-# Version: June 21, 2007
+# Version: July 17, 2008
 # Contact: andrewbadr@gmail.com
 # Code contributions are welcome.
 
@@ -441,9 +441,9 @@ class DFA:
             for char in self.alphabet:
                 next = self.delta(q, char)
                 if next != q:
-                     candidate = long_path(next, length+1, longest)
-                     if candidate > longest:
-                         longest = candidate
+                    candidate = long_path(next, length+1, longest)
+                    if candidate > longest:
+                        longest = candidate
             return longest
         return long_path(self.start, 0, None)
 
