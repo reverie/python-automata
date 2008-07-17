@@ -9,20 +9,20 @@ from copy import copy
 from UnionFind import UnionFind
 
 # TODO: general code cleanup
-# TODO: use sets throughout, especially replacing state_hash functions
+# TODO: write tests
 
 class DFA:
     """This class represents a deterministic finite automaton."""
     def __init__(self, states, alphabet, delta, start, accepts):
         """The inputs to the class are as follows:
-         -states: a lists containing the states of the DFA
-         -alphabet: a list containing the symbols in the DFA's alphabet
-         -delta: a complete function from [states]x[alphabets]->[states].
-         -start: the state at which the DFA begins operation.
-         -accepts: a list containing the "accepting" or "final" states of the DFA
+         - states: An iterable containing the states of the DFA. States must be immutable.
+         - alphabet: An iterable containing the symbols in the DFA's alphabet. Symbols must be immutable.
+         - delta: A complete function from [states]x[alphabets]->[states].
+         - start: The state at which the DFA begins operation.
+         - accepts: A list containing the "accepting" or "final" states of the DFA.
 
         Making delta a function rather than a transition table makes it much easier to define certain DFAs. 
-        And if you want to use transition tables, you can just do this:
+        If you want to use a transition table, you can just do this:
          delta = lambda q,c: transition_table[q][c]
         One caveat is that the function should not depend on the value of 'states' or 'accepts', since
         these may be modified during minimization.
@@ -30,15 +30,17 @@ class DFA:
         Finally, the names of states and inputs should be hashable. This generally means strings, numbers,
         or tuples of hashables.
         """
-        self.states = states
+        self.states = set(states)
         self.start = start
         self.delta = delta
-        self.accepts = accepts
-        self.alphabet = alphabet
+        self.accepts = set(accepts)
+        self.alphabet = set(alphabet)
         self.current_state = start
+
 #
 # Administrative functions:
 #
+
     def pretty_print(self):
         """Displays all information about the DFA in an easy-to-read way. Not
         actually that easy to read if it has too many states.
@@ -50,21 +52,20 @@ class DFA:
         print "Starting state:", self.start
         print "Accepting states:", self.accepts
         print "Transition function:"
-        print "\t","\t".join(map(str,self.states))
+        print "\t","\t".join(map(str, sorted(self.states)))
         for c in self.alphabet:
-            results = map(lambda x: self.delta(x, c), self.states)
+            results = map(lambda x: self.delta(x, c), sorted(self.states))
             print c, "\t", "\t".join(map(str, results))
         print "Current state:", self.current_state
         print "Currently accepting:", self.status()
         print ""
+
     def validate(self):
         """Checks that: 
         (1) The accepting-state set is a subset of the state set.
         (2) The start-state is a member of the state set.
         (3) The current-state is a member of the state set.
         (4) Every transition returns a member of the state set.
-
-        Obviously, this function will not work on infinite DFAs
         """
         assert set(self.accepts).issubset(set(self.states))
         assert self.start in self.states
@@ -72,26 +73,32 @@ class DFA:
         for state in self.states:
             for char in self.alphabet:
                 assert self.delta(state, char) in self.states
+
     def copy(self):
         """Returns a copy of the DFA. No data is shared with the original."""
-        return DFA(copy(self.states), copy(self.alphabet), self.delta, self.start, copy(self.accepts))
+        return DFA(self.states, self.alphabet, self.delta, self.start, self.accepts)
 
 #
 # Simulating execution:
 #
+
     def input(self, char):
         """Updates the DFA's current state based on a single character of input."""
         self.current_state = self.delta(self.current_state, char)
+
     def input_sequence(self, char_sequence):
         """Updates the DFA's current state based on an iterable of inputs."""
         for char in char_sequence:
             self.input(char)
+
     def status(self):
         """Indicates whether the DFA's current state is accepting."""
         return (self.current_state in self.accepts)
+
     def reset(self):
         """Returns the DFA to the starting state."""
         self.current_state = self.start
+
     def recognizes(self, char_sequence):
         """Indicates whether the DFA accepts a given string."""
         state_save = self.current_state
@@ -100,6 +107,7 @@ class DFA:
         valid = self.status()
         self.current_state = state_save
         return valid
+
 #
 # Minimization methods and their helper functions
 #
@@ -109,17 +117,11 @@ class DFA:
         """
         d = {}
         for state in self.states:
-                d[state] = copy(value)
+            if callable(value):
+                d[state] = value()
+            else:
+                d[state] = value
         return d
-
-    def state_subset_hash(self, subset):
-        """Creates a hash with one key for every state in the DFA, with
-        the value True for states in 'subset' and False for all others.
-        """
-        hash = self.state_hash(False)
-        for q in subset:
-            hash[q] = True
-        return hash
 
     def state_merge(self, q1, q2):
         """Merges q1 into q2. All transitions to q1 are moved to q2.
@@ -172,6 +174,7 @@ class DFA:
             if q in self.states:
                 new_accepts.append(q)
         self.accepts = new_accepts
+
     def mn_classes(self):
         """Returns a partition of self.states into Myhill-Nerode equivalence classes."""
         changed = True
@@ -208,6 +211,7 @@ class DFA:
                         classes.append(new_class)
                         break
         return classes
+
     def collapse(self, partition):
         """Given a partition of the DFA's states into equivalence classes,
         collapses every equivalence class into a single "representative" state.
@@ -247,6 +251,7 @@ class DFA:
         self.accepts = new_accepts
         self.current_state = new_current_state
         return state_map
+
     def minimize(self):
         """Classical DFA minimization, using the simple O(n^2) algorithm.
         Side effect: can mix up the internal ordering of states.
@@ -284,9 +289,8 @@ class DFA:
         """
         #Step 1: Build the states' profiles
         loops    = self.state_hash(0)
-        inbound  = self.state_hash([])
-        outbound = self.state_hash([])
-        accepts  = self.state_subset_hash(self.accepts)
+        inbound  = self.state_hash(list)
+        outbound = self.state_hash(list)
         for state in self.states:
             for c in self.alphabet:
                 next = self.delta(state, c)
@@ -298,7 +302,7 @@ class DFA:
         to_pluck = []
         for state in self.states:
             if len(outbound[state]) == loops[state]:
-                if not accepts[state]:
+                if not state in self.accepts:
                     #prints("Adding '%s' to be plucked" % state)
                     to_pluck.append(state)
         #Step 3: Pluck!
@@ -322,11 +326,10 @@ class DFA:
         finite languages.
         """
         #Step 1: Build the states' profiles
-        inbound  = self.state_hash([])
-        outbound = self.state_hash([])
-        is_sink_state = self.state_subset_hash(sink_states)
+        inbound  = self.state_hash(list)
+        outbound = self.state_hash(list)
         for state in self.states:
-            if is_sink_state[state]:
+            if state in sink_states:
                 continue
             for c in self.alphabet:
                 next = self.delta(state, c)
@@ -403,6 +406,7 @@ class DFA:
                 rep = pres[0]
                 for p_state in pres[1:]:
                         self.state_merge(p_state, rep)
+
     def levels(self):
         """Returns a dictionary mapping each state to its distance from the starting state."""
         levels = {}
@@ -423,6 +427,7 @@ class DFA:
             level_states = next_level_states
             level_number = next_level_number
         return levels
+
     def longest_word_length(self):
         """Given a DFA recognizing a finite language, returns the length of the
         longest word in that language, or None if the language is empty.
@@ -456,8 +461,11 @@ class DFA:
         
         There exists a faster, O(n*logn)-time algorithm due to Korner, from CIAA 2002.
         """
+
         assert(self.is_finite())
+
         self.minimize()
+
         ###Step 0: Numbering the states and computing "l"
         n = len(self.states) - 1
         state_order = self.pluck_leaves()
@@ -472,7 +480,7 @@ class DFA:
             return state_order[n]
 
         ###Step 1: Computing the gap function
-        # 1.1
+        # 1.1 -- Step numbering is from the paper
         level = self.levels() #holds real names
         gap = {}  #holds numerical names
         # 1.2 
@@ -503,6 +511,7 @@ class DFA:
                             g = gap[(j2, i2)]
                         if g+1 <= level_range(i, j):
                             gap[(i,j)] = min(gap[(i,j)], g+1)
+
         ###Step 2: Merging states
         # 2.1
         P = {}
@@ -517,10 +526,10 @@ class DFA:
                         P[j] = True
         return l
 
-
 #
 # Boolean set operations on languages -- end of the DFA class
 #
+
 def cross_product(D1, D2, accept_method):
     """A generalized cross-product constructor over two DFAs. 
     The third argument is a binary boolean function f; a state (q1, q2) in the final
@@ -538,14 +547,13 @@ def cross_product(D1, D2, accept_method):
         return (next_D1, next_D2)
     alphabet = copy(D1.alphabet)
     accepts = []
-    D1_accepts = D1.state_subset_hash(D1.accepts) #we like to keep things O(n^2) around here...
-    D2_accepts = D2.state_subset_hash(D2.accepts)
     for (s1, s2) in states:
-        a1 = D1_accepts[s1]
-        a2 = D2_accepts[s2]
+        a1 = s1 in D1.accepts
+        a2 = s2 in D2.accepts
         if accept_method(a1, a2):
             accepts.append((s1, s2))
     return DFA(states=states, start=start, delta=delta, accepts=accepts, alphabet=alphabet)
+
 def intersection(D1, D2):
     """Constructs an unminimized DFA recognizing the intersection of the languages of two given DFAs."""
     f = bool.__and__
@@ -568,9 +576,11 @@ def inverse(D):
         if state not in D.accepts:
             new_accepts.append(state)
     return DFA(states=D.states, start=D.start, delta=D.delta, accepts=new_accepts, alphabet=D.alphabet)
+
 # 
 # Constructing new DFAs
 # 
+
 def from_word_list(language, alphabet):
     """Constructs an unminimized DFA accepting the given finite language."""
     accepts = language
@@ -590,6 +600,7 @@ def from_word_list(language, alphabet):
         else:
             return sink
     return DFA(states=states, alphabet=alphabet, delta=delta, start=start, accepts=accepts)
+
 def modular_zero(n, base=2):
     """Returns a DFA that accepts all binary numbers equal to 0 mod n. Use the optional
     parameter "base" if you want something other than binary. The empty string is also 
@@ -601,6 +612,7 @@ def modular_zero(n, base=2):
     start = 0
     accepts = [0]
     return DFA(states=states, alphabet=alphabet, delta=delta, start=start, accepts=accepts)
+
 def random(states_size, alphabet_size, acceptance=0.5):
     """Constructs a random DFA with "states_size" states and "alphabet_size" inputs. Each 
     transition destination is chosen uniformly at random, so the resultant DFA may have 
@@ -619,9 +631,11 @@ def random(states_size, alphabet_size, acceptance=0.5):
             tt[q][c] = random.choice(states)
     delta = lambda q, c: tt[q][c]
     return DFA(states, alphabet, delta, start, accepts)
+
 # 
 # Finite-factoring
 # 
+
 def finite_factor(self):
     D1 = self.copy()
     D1.minimize()
